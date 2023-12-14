@@ -112,7 +112,8 @@ async def upload(image: UploadFile = File(...)):
 
         scaled_similarities = [1 + (similarity * 9) for similarity in similarities]
 
-        base_url = "http://127.0.0.1:9000/static/"
+        # base_url = "http://127.0.0.1:9000/static/"
+        base_url = "https://fastapi-example-40q5.onrender.com/static/"
 
 
 
@@ -162,7 +163,8 @@ async def advanceSearch(image: UploadFile = File(...)):
 
         scaled_similarities = [1 + (similarity * 9) for similarity in similarities]
 
-        base_url = "http://127.0.0.1:9000/static/"
+        # base_url = "http://127.0.0.1:9000/static/"
+        base_url = "https://fastapi-example-40q5.onrender.com/static/"
 
         # Prepare JSON response data
         json_response_data = {
