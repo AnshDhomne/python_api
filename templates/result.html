@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Similar Images</title>
+</head>
+<body>
+    <h1>Provided Image: {{ request }}</h1>
+    <h2>Top Similar Images:</h2>
+    <ul>
+        {% for image in top_similar_images %}
+            <li>{{ image.index }}. {{ image.name }} (Cosine Similarity: {{ image.similarity|floatformat:4 }})</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

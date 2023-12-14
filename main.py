@@ -9,14 +9,35 @@ import os
 import torch
 import torchvision.transforms as transforms
 import torchvision.models as models
-
+import json
+from html import unescape
 app = FastAPI()
 
+raw_json = """
+[
+    {"name": "5x_1.png", "link": "https://example.com/images/5x_1.png"},
+    {"name": "5x_2.png", "link": "https://example.com/images/5x_2.png"},
+    {"name": "5x_3.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/f378613f69584d063ca6593e?renderMode=0&uiState=657b05059e258f3ce790710b"},
+    {"name": "5x_5.png", "link": "https://example.com/images/5x_5.png"},
+    {"name": "another_test.jpeg", "link": "https://example.com/images/another_test.jpeg"},
+    {"name": "Screenshot 2023-11-08 at 1.06.38 PM.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/8a2c7eb6e95098c309fd2f59?renderMode=0&uiState=657afde69e258f3ce78f6daf"},
+    {"name": "Screenshot 2023-11-08 at 1.07.28 PM.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/ab62e8c39b68ff91652a21cd?renderMode=0&uiState=657afe0f9e258f3ce78f6e15"},
+    {"name": "Screenshot 2023-11-08 at 1.08.20 PM.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/870ab50d1e7635126cf6c8c5?renderMode=0&uiState=657afe309e258f3ce78f6eb2"},
+    {"name": "Screenshot 2023-11-08 at 1.08.41 PM.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/c107c73089382bdedabf07a4?renderMode=0&uiState=657b01959e258f3ce790568e"},
+    {"name": "ss_2.png", "link": "https://cad.onshape.com/documents/78d69674ed186dd2164efe20/w/14520a522f98a7211ef0f35e/e/e35fb2a39f8f24fddd720749?renderMode=0&uiState=657afda09e258f3ce78f6b49"}
+]
+"""
 
-# app.mount("/train_images", StaticFiles(directory="../train_images"), name="train_images")
+# Load the JSON string into a Python object
+json_data = json.loads(raw_json)
 
 
-app.mount("/static", StaticFiles(directory="images"), name="static")
+# Create "static" directory if it doesn't exist
+static_directory = "static/"
+if not os.path.exists(static_directory):
+    os.makedirs(static_directory)
+
+app.mount("/static", StaticFiles(directory=static_directory), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # Define the model and related components
@@ -50,13 +71,29 @@ def read_data():
 
 vecs, names = read_data()
 
+def find_data(json_data, name_to_find):
+    # Decode HTML entities in the name_to_find
+    name_to_find_decoded = unescape(name_to_find)
+
+    name_to_find_decoded = name_to_find_decoded.replace('\u00A0', ' ')
+    name_to_find_decoded = name_to_find_decoded.replace('&nbsp;', ' ')
+    name_to_find_decoded = name_to_find_decoded.replace('\u00A0', ' ').replace('&nbsp;', ' ').replace('\u2009', ' ').replace('\u202F', ' ')
+
+
+    # Search for the specified name in the JSON data
+    found_data = next(
+        (item for item in json_data if item["name"] == name_to_find or item["name"] == name_to_find_decoded),
+        None
+    )
+
+    return found_data
 
 @app.post("/upload")
 async def upload(image: UploadFile = File(...)):
-    threshold = 8
+    threshold = 7.5
     try:
         # Save the received image temporarily
-        file_path = f"static/{image.filename}"
+        file_path = f"{static_directory}{image.filename}"
         with open(file_path, "wb") as buffer:
             buffer.write(image.file.read())
 
@@ -70,37 +107,35 @@ async def upload(image: UploadFile = File(...)):
         # Calculate cosine similarity between the new image and all images in the dataset
         similarities = cosine_similarity(target_vec.reshape(1, -1), vecs).flatten()
 
-
-
         # Get the indices of top similar images
         top_similar_indices = similarities.argsort()[::-1]
 
         scaled_similarities = [1 + (similarity * 9) for similarity in similarities]
 
-        base_url = "https://fastapi-example-40q5.onrender.com/static/"
+        base_url = "http://127.0.0.1:9000/static/"
+
+
+
 
         # Prepare JSON response data
         json_response_data = {
-            # "provided_image": image.filename,
+
             "data": [
                 {
                     "index": i + 1,
                     "name": names[index],
+                    "test_url": find_data(json_data,names[index])['link'],
                     "similarity": round(scaled_similarities[index], 2) *  10,  # Round to two decimal places
                     "image_url": f"{base_url}{names[index]}"  # Complete image URL
                 }
                 for i, index in enumerate(top_similar_indices)
+
                 if scaled_similarities[index] >= threshold
             ],
+
         }
         return json_response_data
 
-
-        # return {"top_similar_images": [
-        #             {"index": i + 1, "name": names[index], "similarity": similarities[index]}
-        #             for i, index in enumerate(top_similar_indices)
-        #         ]
-        # }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -108,7 +143,7 @@ async def upload(image: UploadFile = File(...)):
 async def advanceSearch(image: UploadFile = File(...)):
     try:
         # Save the received image temporarily
-        file_path = f"static/{image.filename}"
+        file_path = f"{static_directory}{image.filename}"
         with open(file_path, "wb") as buffer:
             buffer.write(image.file.read())
 
@@ -122,18 +157,15 @@ async def advanceSearch(image: UploadFile = File(...)):
         # Calculate cosine similarity between the new image and all images in the dataset
         similarities = cosine_similarity(target_vec.reshape(1, -1), vecs).flatten()
 
-
-
         # Get the indices of top similar images
         top_similar_indices = similarities.argsort()[::-1]
 
         scaled_similarities = [1 + (similarity * 9) for similarity in similarities]
 
-        base_url = "https://fastapi-example-40q5.onrender.com/static/"
+        base_url = "http://127.0.0.1:9000/static/"
 
         # Prepare JSON response data
         json_response_data = {
-            # "provided_image": image.filename,
             "data": [
                 {
                     "index": i + 1,
@@ -146,12 +178,6 @@ async def advanceSearch(image: UploadFile = File(...)):
         }
         return json_response_data
 
-
-        # return {"top_similar_images": [
-        #             {"index": i + 1, "name": names[index], "similarity": similarities[index]}
-        #             for i, index in enumerate(top_similar_indices)
-        #         ]
-        # }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
